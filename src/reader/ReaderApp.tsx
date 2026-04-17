@@ -1,5 +1,5 @@
 import clsx from 'clsx'
-import { useMemo } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef } from 'react'
 import DocumentPanel from './components/DocumentPanel'
 import FilePanel from './components/FilePanel'
 import ImageLightbox from './components/ImageLightbox'
@@ -13,6 +13,7 @@ import { ReaderWorkspaceProvider } from './ReaderWorkspaceContext'
 import { useReaderDocumentView } from './hooks/useReaderDocumentView'
 import { useReaderInteractions } from './hooks/useReaderInteractions'
 import { useReaderWorkspace } from './hooks/useReaderWorkspace'
+import { BRAND_TITLE_SUFFIX } from '../shared/brand'
 import { getBookmarkLabel } from './utils'
 
 function ReaderApp() {
@@ -20,13 +21,15 @@ function ReaderApp() {
   const {
     actions,
     refs,
-    state: { activeDocument, activeHeadingId, activeParagraphIndex, settings, statusMessage, tocFilter, progress },
+    state: { activeDocument, activeHeadingId, activeParagraphIndex, settings, statusMessage, tocFilter, tocItems, progress },
   } = workspace
+  const isLeftPanelFull = settings.showFileTree && settings.leftPanelMode === 'full'
 
-  const { imageSources, markdownComponents, rootStyle, stats, tocItems } = useReaderDocumentView({
+  const { imageSources, markdownComponents, rootStyle, stats } = useReaderDocumentView({
     activeDocument,
     activeParagraphIndex,
-    onLightboxOpen: (index) => actions.setLightboxIndex(index),
+    articleRef: refs.articleRef,
+    onLightboxOpen: actions.setLightboxIndex,
     settings,
   })
 
@@ -41,8 +44,33 @@ function ReaderApp() {
     activeDocument?.title ?? 'Current section',
   )
 
+  useEffect(() => {
+    document.title = activeDocument ? `${activeDocument.title} · ${BRAND_TITLE_SUFFIX}` : BRAND_TITLE_SUFFIX
+  }, [activeDocument])
+
+  // Measure the sticky chrome (toolbar + progress rail) so sidebars can offset
+  // against it. Writing to a CSS variable keeps the paint on the compositor
+  // instead of re-rendering React on every resize.
+  const shellRef = useRef<HTMLDivElement | null>(null)
+  const chromeRef = useRef<HTMLDivElement | null>(null)
+  useLayoutEffect(() => {
+    const chrome = chromeRef.current
+    const shell = shellRef.current
+    if (!chrome || !shell) return
+
+    const applyHeight = () => {
+      shell.style.setProperty('--reader-chrome-height', `${chrome.offsetHeight}px`)
+    }
+
+    applyHeight()
+    const observer = new ResizeObserver(applyHeight)
+    observer.observe(chrome)
+    return () => observer.disconnect()
+  }, [])
+
   useReaderInteractions({
     activeDocument,
+    leftPanelMode: settings.leftPanelMode,
     articleRef: refs.articleRef,
     autoRefresh: settings.autoRefresh,
     contentScrollRef: refs.contentScrollRef,
@@ -54,6 +82,11 @@ function ReaderApp() {
     onCommandPaletteToggle: () => actions.setCommandPaletteOpen((current) => !current),
     onDocumentRefresh: actions.setDocument,
     onHelpOpen: () => actions.setHelpOpen(true),
+    onLibraryFocusModeChange: (nextMode) =>
+      actions.updateSettings({
+        leftPanelMode: nextMode,
+        showFileTree: true,
+      }),
     onSearchOpen: () => actions.setSearchOpen(true),
     onSelectionChange: actions.setCurrentSelection,
     onStatusMessage: actions.setStatusMessage,
@@ -63,18 +96,26 @@ function ReaderApp() {
   return (
     <ReaderWorkspaceProvider value={workspace}>
       <div
+        ref={shellRef}
         className={clsx('reader-shell', `mode-${settings.mode}`)}
         style={rootStyle}
         onDragOver={(event) => event.preventDefault()}
         onDrop={actions.handleDrop}
       >
-        <ReaderToolbar />
-
-        <div className="progress-rail">
-          <span className="progress-bar" style={{ width: `${progress * 100}%` }} />
+        <div ref={chromeRef} className="reader-chrome">
+          <ReaderToolbar />
+          <div className="progress-rail">
+            <span className="progress-bar" style={{ width: `${progress * 100}%` }} />
+          </div>
         </div>
 
-        <div className="reader-layout">
+        <div
+          className={clsx('reader-layout', {
+            'file-panel-hidden': !settings.showFileTree,
+            'toc-panel-hidden': !settings.showToc,
+            'left-panel-full': isLeftPanelFull,
+          })}
+        >
           <FilePanel />
           <DocumentPanel
             activeHeadingId={activeHeadingId}

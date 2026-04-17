@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" fill="none">
+  <defs>
+    <linearGradient id="waraq-bg" x1="24" y1="20" x2="228" y2="236" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#12284B" />
+      <stop offset="0.55" stop-color="#16356A" />
+      <stop offset="1" stop-color="#09111E" />
+    </linearGradient>
+    <linearGradient id="waraq-glow" x1="64" y1="66" x2="204" y2="196" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#7DD3FC" />
+      <stop offset="0.52" stop-color="#C4B5FD" />
+      <stop offset="1" stop-color="#F9FAFB" />
+    </linearGradient>
+  </defs>
+
+  <rect x="16" y="16" width="224" height="224" rx="56" fill="url(#waraq-bg)" />
+  <path
+    d="M76 78h88l28 28v74c0 10-8 18-18 18H90c-10 0-18-8-18-18V96c0-10 8-18 18-18Z"
+    fill="#0E1B31"
+    fill-opacity="0.72"
+    stroke="rgba(255,255,255,0.12)"
+  />
+  <path d="M164 78v18c0 11 9 20 20 20h18" stroke="#8FD2FF" stroke-linecap="round" stroke-linejoin="round" stroke-width="10" />
+  <path
+    d="M82 108L102 172L128 126L154 172L174 108"
+    stroke="url(#waraq-glow)"
+    stroke-linecap="round"
+    stroke-linejoin="round"
+    stroke-width="18"
+  />
+  <path
+    d="M74 168c18 21 41 32 69 32 31 0 57-12 78-36"
+    stroke="rgba(125,211,252,0.18)"
+    stroke-linecap="round"
+    stroke-width="8"
+  />
+</svg>

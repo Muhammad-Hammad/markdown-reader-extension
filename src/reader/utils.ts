@@ -1,5 +1,24 @@
 import type { ReactNode } from 'react'
-import type { FileNode, ReaderMode, TocItem } from '../shared/types'
+import type { FileNode, NoteRecord, ReaderMode, TocItem } from '../shared/types'
+
+const FENCED_CODE_BLOCK_PATTERN = /```[\s\S]*?```/g
+const READING_WORDS_PER_MINUTE = 220
+
+export interface TextStats {
+  words: number
+  characters: number
+  readMinutes: number
+}
+
+export interface TextPosition {
+  node: Text
+  offset: number
+}
+
+export interface TextPositionIndex {
+  normalizedText: string
+  positions: TextPosition[]
+}
 
 export function parseFrontmatter(content: string) {
   const match = content.match(/^---\n([\s\S]*?)\n---/)
@@ -58,12 +77,14 @@ export function flattenReactText(node: ReactNode): string {
 }
 
 export function extractToc(content: string): TocItem[] {
+  const resolveHeadingId = createHeadingIdResolver()
+
   return content
     .split('\n')
     .map((line) => line.match(/^(#{1,4})\s+(.+)$/))
     .filter((match): match is RegExpMatchArray => Boolean(match))
     .map((match) => ({
-      id: slugify(match[2]),
+      id: resolveHeadingId(match[2]),
       depth: match[1].length,
       text: match[2].trim(),
     }))
@@ -71,6 +92,38 @@ export function extractToc(content: string): TocItem[] {
 
 export function getBookmarkLabel(tocItems: TocItem[], activeHeadingId: string, fallback: string) {
   return tocItems.find((item) => item.id === activeHeadingId)?.text ?? fallback
+}
+
+/**
+ * Walks backwards from the active heading and collects every ancestor id —
+ * i.e. the preceding items with strictly lower depth. Used to paint the
+ * accent-coloured nesting guide along the path from the top-level heading
+ * down to the heading currently in view.
+ */
+export function getAncestorHeadingIds(tocItems: TocItem[], activeHeadingId: string): Set<string> {
+  const ancestors = new Set<string>()
+
+  if (!activeHeadingId) {
+    return ancestors
+  }
+
+  const activeIndex = tocItems.findIndex((item) => item.id === activeHeadingId)
+  if (activeIndex < 0) {
+    return ancestors
+  }
+
+  ancestors.add(activeHeadingId)
+  let currentDepth = tocItems[activeIndex].depth
+
+  for (let index = activeIndex - 1; index >= 0 && currentDepth > 1; index -= 1) {
+    const candidate = tocItems[index]
+    if (candidate.depth < currentDepth) {
+      ancestors.add(candidate.id)
+      currentDepth = candidate.depth
+    }
+  }
+
+  return ancestors
 }
 
 export function slugify(value: string) {
@@ -81,13 +134,214 @@ export function slugify(value: string) {
     .replace(/\s+/g, '-')
 }
 
+export function createHeadingIdResolver() {
+  const seen = new Map<string, number>()
+
+  return (value: string) => {
+    const baseId = slugify(value) || 'section'
+    const currentCount = seen.get(baseId) ?? 0
+    seen.set(baseId, currentCount + 1)
+
+    return currentCount === 0 ? baseId : `${baseId}-${currentCount}`
+  }
+}
+
 export function getDocumentStats(content: string) {
-  const clean = content.replace(/```[\s\S]*?```/g, '').trim()
-  const words = clean ? clean.split(/\s+/).length : 0
+  return getTextStats(content.replace(FENCED_CODE_BLOCK_PATTERN, ' '))
+}
+
+export function getTextStats(content: string): TextStats {
+  const clean = normalizePlainText(content)
+  if (!clean) {
+    return {
+      words: 0,
+      characters: 0,
+      readMinutes: 0,
+    }
+  }
+
+  const words = clean.split(/\s+/).length
   const characters = clean.length
-  const readMinutes = Math.max(1, Math.round(words / 220))
+  const readMinutes = Math.max(1, Math.round(words / READING_WORDS_PER_MINUTE))
 
   return { words, characters, readMinutes }
+}
+
+export function normalizePlainText(content: string) {
+  return content.replace(/\s+/g, ' ').trim()
+}
+
+export function buildTextPositionIndex(article: HTMLElement): TextPositionIndex {
+  const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT)
+  const positions: TextPosition[] = []
+  let normalizedText = ''
+  let previousWasWhitespace = true
+
+  while (walker.nextNode()) {
+    const node = walker.currentNode
+    if (!(node instanceof Text)) {
+      continue
+    }
+
+    const parentElement = node.parentElement
+    if (!parentElement || parentElement.closest('pre, code, script, style, .frontmatter-card')) {
+      continue
+    }
+
+    const value = node.textContent ?? ''
+    for (let index = 0; index < value.length; index += 1) {
+      const character = value[index]
+      if (/\s/.test(character)) {
+        if (!previousWasWhitespace && normalizedText.length > 0) {
+          normalizedText += ' '
+          positions.push({ node, offset: index })
+          previousWasWhitespace = true
+        }
+        continue
+      }
+
+      normalizedText += character
+      positions.push({ node, offset: index })
+      previousWasWhitespace = false
+    }
+  }
+
+  if (normalizedText.endsWith(' ')) {
+    normalizedText = normalizedText.slice(0, -1)
+    positions.pop()
+  }
+
+  return {
+    normalizedText,
+    positions,
+  }
+}
+
+export function createTextRange(positions: TextPosition[], start: number, end: number) {
+  if (start < 0 || end <= start || end > positions.length) {
+    return null
+  }
+
+  const startPosition = positions[start]
+  const endPosition = positions[end - 1]
+  if (!startPosition || !endPosition) {
+    return null
+  }
+
+  const range = document.createRange()
+  range.setStart(startPosition.node, startPosition.offset)
+  range.setEnd(endPosition.node, endPosition.offset + 1)
+  return range
+}
+
+export function captureSelectionLocation(article: HTMLElement, selection: Selection | null) {
+  if (!selection || selection.rangeCount === 0 || selection.isCollapsed) {
+    return null
+  }
+
+  const range = selection.getRangeAt(0)
+  const rangeParent = range.commonAncestorContainer instanceof Element
+    ? range.commonAncestorContainer
+    : range.commonAncestorContainer.parentElement
+
+  if (!rangeParent || !article.contains(rangeParent)) {
+    return null
+  }
+
+  const textIndex = buildTextPositionIndex(article)
+  const offsets = getTextRangeOffsets(textIndex, range)
+
+  return {
+    headingId: findClosestHeadingId(article, range.startContainer),
+    selectionStart: offsets?.start,
+    selectionEnd: offsets?.end,
+  }
+}
+
+export function resolveNoteTextRange(article: HTMLElement, note: NoteRecord) {
+  const textIndex = buildTextPositionIndex(article)
+
+  if (typeof note.selectionStart === 'number' && typeof note.selectionEnd === 'number') {
+    return {
+      textIndex,
+      range: createTextRange(textIndex.positions, note.selectionStart, note.selectionEnd),
+    }
+  }
+
+  const quote = normalizePlainText(note.quote)
+  if (!quote) {
+    return {
+      textIndex,
+      range: null,
+    }
+  }
+
+  const start = textIndex.normalizedText.indexOf(quote)
+  if (start === -1) {
+    return {
+      textIndex,
+      range: null,
+    }
+  }
+
+  return {
+    textIndex,
+    range: createTextRange(textIndex.positions, start, start + quote.length),
+  }
+}
+
+function getTextRangeOffsets(textIndex: TextPositionIndex, range: Range) {
+  let start = -1
+  let end = -1
+
+  for (let index = 0; index < textIndex.positions.length; index += 1) {
+    const position = textIndex.positions[index]
+
+    try {
+      if (!range.isPointInRange(position.node, position.offset)) {
+        continue
+      }
+    } catch {
+      continue
+    }
+
+    if (start === -1) {
+      start = index
+    }
+
+    end = index + 1
+  }
+
+  if (start === -1 || end === -1) {
+    return null
+  }
+
+  return { start, end }
+}
+
+function findClosestHeadingId(article: HTMLElement, target: Node) {
+  const targetElement = target instanceof Element ? target : target.parentElement
+  if (!targetElement || !article.contains(targetElement)) {
+    return undefined
+  }
+
+  const headings = Array.from(article.querySelectorAll<HTMLElement>('h1, h2, h3, h4')).filter((heading) => heading.id)
+  let activeHeadingId: string | undefined
+
+  for (const heading of headings) {
+    if (heading === targetElement) {
+      return heading.id
+    }
+
+    if (heading.compareDocumentPosition(targetElement) & Node.DOCUMENT_POSITION_FOLLOWING) {
+      activeHeadingId = heading.id
+      continue
+    }
+
+    break
+  }
+
+  return activeHeadingId
 }
 
 export function collectDirectoryPaths(nodes: FileNode[]): string[] {

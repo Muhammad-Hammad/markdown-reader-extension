@@ -23,6 +23,16 @@ body {
   color: var(--reader-text);
 }
 
+::highlight(reader-read-aloud-sentence) {
+  background: color-mix(in srgb, var(--reader-accent) 22%, transparent);
+  color: inherit;
+}
+
+::highlight(reader-read-aloud-word) {
+  background: color-mix(in srgb, var(--reader-accent) 62%, transparent);
+  color: var(--reader-heading);
+}
+
 button,
 input,
 select,
@@ -31,25 +41,70 @@ textarea {
 }
 
 .reader-shell {
+  /* Page-flow layout. The viewport is the scroll container; sidebars pin via
+     position:sticky. --reader-chrome-height is set by a ResizeObserver in
+     ReaderApp and used by sidebars for their top offset and max-height. */
+  display: flex;
+  flex-direction: column;
   min-height: 100vh;
+  --reader-chrome-height: 76px;
   background:
     radial-gradient(circle at top right, var(--reader-accent-soft), transparent 28%),
     var(--reader-surface);
   color: var(--reader-text);
 }
 
-.reader-toolbar {
+/* Sticky chrome groups toolbar + progress rail so they float as one unit and
+   we can measure a single height for sidebar offsets. */
+.reader-chrome {
   position: sticky;
   top: 0;
   z-index: 30;
+  background: color-mix(in srgb, var(--reader-panel) 92%, transparent);
+  backdrop-filter: blur(18px);
+  border-bottom: 1px solid var(--reader-border);
+}
+
+.reader-toolbar {
   display: grid;
   grid-template-columns: auto 1fr auto;
   gap: 12px;
   align-items: center;
   padding: 16px 18px;
-  border-bottom: 1px solid var(--reader-border);
-  background: color-mix(in srgb, var(--reader-panel) 92%, transparent);
-  backdrop-filter: blur(18px);
+  background: transparent;
+}
+
+.toolbar-brand {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding-right: 6px;
+  margin-right: 4px;
+}
+
+.toolbar-brand-mark {
+  flex: 0 0 auto;
+  border-radius: 12px;
+  box-shadow: 0 10px 24px color-mix(in srgb, var(--reader-accent) 18%, transparent);
+}
+
+.toolbar-brand-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.toolbar-brand-copy strong {
+  color: var(--reader-heading);
+  font-size: 0.98rem;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+
+.toolbar-brand-copy span {
+  max-width: 210px;
+  color: var(--reader-muted);
+  font-size: 0.73rem;
+  line-height: 1.35;
 }
 
 .toolbar-group,
@@ -64,13 +119,13 @@ textarea {
 }
 
 .source-bar {
+  min-width: 0;
   padding: 0 12px;
   border-radius: 14px;
   border: 1px solid var(--reader-border);
   background: color-mix(in srgb, var(--reader-panel) 96%, transparent);
 }
 
-.source-bar input,
 .search-input input,
 .settings-grid select {
   width: 100%;
@@ -78,6 +133,15 @@ textarea {
   outline: 0;
   background: transparent;
   color: inherit;
+}
+
+.source-address {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--reader-muted);
 }
 
 .toolbar-button {
@@ -112,8 +176,88 @@ textarea {
   border-color: transparent;
 }
 
+.toolbar-button:disabled,
+.read-aloud-source-button:disabled {
+  opacity: 0.55;
+  cursor: not-allowed;
+  transform: none;
+}
+
 .toolbar-button.icon {
   padding-inline: 12px;
+}
+
+.theme-switcher {
+  position: relative;
+}
+
+.theme-trigger {
+  min-width: 122px;
+  justify-content: space-between;
+}
+
+.theme-menu {
+  position: absolute;
+  top: calc(100% + 10px);
+  right: 0;
+  z-index: 40;
+  width: 320px;
+  display: grid;
+  gap: 8px;
+  padding: 10px;
+  border: 1px solid var(--reader-border);
+  border-radius: 18px;
+  background: color-mix(in srgb, var(--reader-panel) 98%, transparent);
+  box-shadow: var(--reader-shadow);
+  backdrop-filter: blur(18px);
+}
+
+.theme-menu-item {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px;
+  align-items: start;
+  width: 100%;
+  padding: 12px 14px;
+  border: 1px solid transparent;
+  border-radius: 14px;
+  background: transparent;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.theme-menu-item:hover {
+  border-color: color-mix(in srgb, var(--reader-accent) 28%, var(--reader-border));
+  background: color-mix(in srgb, var(--reader-accent-soft) 36%, transparent);
+}
+
+.theme-menu-item.active {
+  border-color: transparent;
+  background: color-mix(in srgb, var(--reader-accent) 22%, transparent);
+}
+
+.theme-icon-shell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  border-radius: 12px;
+  background: color-mix(in srgb, var(--reader-surface) 32%, transparent);
+}
+
+.theme-copy {
+  display: grid;
+  gap: 4px;
+}
+
+.theme-copy strong {
+  color: var(--reader-heading);
+}
+
+.theme-copy small {
+  color: var(--reader-muted);
 }
 
 .progress-rail {
@@ -128,15 +272,38 @@ textarea {
 }
 
 .reader-layout {
+  /* Page-flow: content defines column height. Sidebars pin via position:sticky
+     while the center track grows naturally so the viewport is the only scroll
+     container. This removes the nested scroll context that was causing lag. */
   display: grid;
-  grid-template-columns: 320px minmax(0, 1fr) 320px;
+  grid-template-columns: 352px minmax(0, 1fr) 320px;
   gap: 16px;
   padding: 16px;
+  align-items: start;
+}
+
+.reader-layout.file-panel-hidden {
+  grid-template-columns: minmax(0, 1fr) 320px;
+}
+
+.reader-layout.toc-panel-hidden {
+  grid-template-columns: 320px minmax(0, 1fr);
+}
+
+.reader-layout.file-panel-hidden.toc-panel-hidden,
+.reader-layout.left-panel-full {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.reader-layout.left-panel-full .file-panel,
+.reader-layout.left-panel-full .toc-panel {
+  display: none;
 }
 
 .panel,
 .content-panel,
 .modal-card {
+  min-width: 0;
   border: 1px solid var(--reader-border);
   border-radius: 24px;
   background: color-mix(in srgb, var(--reader-panel) 98%, transparent);
@@ -144,11 +311,21 @@ textarea {
 }
 
 .panel {
+  /* Sidebars pin under the sticky chrome and own their internal scroll. The
+     max-height caps against viewport minus chrome + outer padding so the
+     sticky track never exceeds the visible area. */
+  position: sticky;
+  top: calc(var(--reader-chrome-height, 76px) + 16px);
+  max-height: calc(100vh - var(--reader-chrome-height, 76px) - 32px);
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   overflow: hidden;
 }
 
 .panel-header,
 .modal-header {
+  flex: 0 0 auto;
   display: flex;
   justify-content: space-between;
   gap: 12px;
@@ -162,6 +339,16 @@ textarea {
   display: block;
 }
 
+.panel-header > div:first-child {
+  min-width: 0;
+}
+
+.panel-header-actions {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+}
+
 .panel-header span,
 .dashboard-card small,
 .annotation-card p,
@@ -171,7 +358,6 @@ textarea {
   color: var(--reader-muted);
 }
 
-.panel-stack,
 .sidebar-section,
 .dashboard-card,
 .modal-card,
@@ -185,7 +371,56 @@ textarea {
 }
 
 .panel-stack {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
   padding: 18px;
+}
+
+/* Variant for NavigatorPanel: body itself scrolls internally. */
+.panel-stack--scroll {
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+/* Sticky header inside a scrolling panel-stack (e.g. the TOC filter).
+   Negative top offsets the panel-stack's own padding so the background
+   extends edge-to-edge as the user scrolls. */
+.panel-sticky-top {
+  position: sticky;
+  top: -18px;
+  z-index: 2;
+  margin: -18px -18px 0;
+  padding: 18px 18px 14px;
+  background: color-mix(in srgb, var(--reader-panel) 96%, transparent);
+  backdrop-filter: blur(12px);
+  border-bottom: 1px solid color-mix(in srgb, var(--reader-border) 70%, transparent);
+}
+
+.reader-layout.left-panel-full .file-panel .panel-stack {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-auto-rows: min-content;
+  align-items: start;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+.reader-layout.left-panel-full .file-panel .search-stack,
+.reader-layout.left-panel-full .file-panel .tree-scroll {
+  grid-column: 1 / -1;
+}
+
+.reader-layout.left-panel-full .file-panel .tree-scroll {
+  flex: none;
+  min-height: 0;
+  max-height: 60vh;
+}
+
+.reader-layout.left-panel-full .file-panel .dashboard-card {
+  height: 100%;
 }
 
 .search-stack,
@@ -222,12 +457,90 @@ textarea {
 .annotation-card,
 .frontmatter-card,
 .callout,
-.mermaid-shell,
 .mermaid-error {
   padding: 14px 16px;
   border-radius: 18px;
   border: 1px solid var(--reader-border);
   background: color-mix(in srgb, var(--reader-surface) 40%, transparent);
+}
+
+/* Mermaid diagrams — overflow-safe figure with hover chrome */
+.mermaid-shell {
+  position: relative;
+  margin: 20px 0;
+  padding: 20px 16px;
+  border-radius: 18px;
+  border: 1px solid var(--reader-border);
+  background: color-mix(in srgb, var(--reader-surface) 40%, transparent);
+  overflow: hidden;
+}
+
+.mermaid-canvas {
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  display: flex;
+  justify-content: center;
+  min-height: 40px;
+}
+
+.mermaid-canvas svg {
+  max-width: 100%;
+  height: auto;
+}
+
+.mermaid-chrome {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: inline-flex;
+  gap: 6px;
+  opacity: 0;
+  transition: opacity 0.15s ease;
+  z-index: 2;
+}
+
+.mermaid-shell:hover .mermaid-chrome,
+.mermaid-shell:focus-within .mermaid-chrome {
+  opacity: 1;
+}
+
+.mermaid-chrome-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--reader-border);
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--reader-panel) 92%, transparent);
+  color: var(--reader-muted);
+  cursor: pointer;
+  transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+}
+
+.mermaid-chrome-button:hover:not(:disabled) {
+  color: var(--reader-heading);
+  border-color: color-mix(in srgb, var(--reader-accent) 35%, var(--reader-border));
+  background: color-mix(in srgb, var(--reader-panel) 100%, transparent);
+}
+
+.mermaid-chrome-button:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.mermaid-error strong {
+  display: block;
+  color: var(--reader-heading);
+  margin-bottom: 8px;
+}
+
+.mermaid-error pre {
+  margin: 0;
+  font-size: 0.8rem;
+  white-space: pre-wrap;
+  color: var(--reader-muted);
 }
 
 .dashboard-header,
@@ -240,8 +553,10 @@ textarea {
 
 .tree-scroll {
   position: relative;
+  flex: 1;
+  min-height: 0;
   overflow: auto;
-  max-height: calc(100vh - 330px);
+  overscroll-behavior: contain;
   border-radius: 18px;
   background: color-mix(in srgb, var(--reader-surface) 40%, transparent);
 }
@@ -269,12 +584,52 @@ textarea {
   cursor: pointer;
 }
 
-.tree-button.file::before {
-  content: '';
-  width: 8px;
-  height: 8px;
-  border-radius: 999px;
-  background: var(--reader-accent);
+.tree-button span,
+.list-link span {
+  min-width: 0;
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.tree-row-chevron,
+.tree-row-icon {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.tree-row-chevron {
+  width: 16px;
+  color: var(--reader-muted);
+}
+
+.tree-row-icon {
+  width: 20px;
+  color: var(--reader-muted);
+}
+
+.tree-row.active .tree-row-icon,
+.tree-row.active .tree-row-chevron {
+  color: var(--reader-heading);
+}
+
+.markdown-badge {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 18px;
+  border-radius: 4px;
+  font-family: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  font-size: 10.5px;
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  background: color-mix(in srgb, var(--reader-accent) 82%, transparent);
+  color: color-mix(in srgb, white 94%, var(--reader-accent));
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--reader-accent) 35%, transparent);
 }
 
 .tree-row.active .tree-button {
@@ -283,9 +638,11 @@ textarea {
 }
 
 .content-panel {
-  display: grid;
-  grid-template-rows: auto minmax(0, 1fr) auto;
-  overflow: hidden;
+  /* The document track flows at natural height so the viewport is the scroll
+     container. No height cap, no internal overflow. */
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
 }
 
 .hero-strip {
@@ -303,10 +660,120 @@ textarea {
   color: var(--reader-heading);
 }
 
+.read-aloud-card {
+  display: grid;
+  gap: 16px;
+  padding: 18px 28px 20px;
+  border-bottom: 1px solid var(--reader-border);
+  background: color-mix(in srgb, var(--reader-surface) 18%, transparent);
+}
+
+.read-aloud-header,
+.read-aloud-controls {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: start;
+}
+
+.read-aloud-playback,
+.read-aloud-source-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.read-aloud-controls {
+  align-items: stretch;
+  flex-wrap: wrap;
+}
+
+.read-aloud-field {
+  display: grid;
+  gap: 8px;
+  min-width: 180px;
+  flex: 1 1 240px;
+}
+
+.read-aloud-field span,
+.read-aloud-note,
+.read-aloud-summary {
+  color: var(--reader-muted);
+}
+
+.read-aloud-field select {
+  width: 100%;
+  border: 1px solid var(--reader-border);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: color-mix(in srgb, var(--reader-panel) 96%, transparent);
+  color: inherit;
+}
+
+.read-aloud-summary {
+  display: inline-flex;
+  gap: 8px;
+  align-items: center;
+  flex-wrap: wrap;
+  padding: 10px 12px;
+  border: 1px solid var(--reader-border);
+  border-radius: 12px;
+}
+
+.read-aloud-summary-copy {
+  color: inherit;
+}
+
+.read-aloud-current-word {
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--reader-accent) 18%, transparent);
+  color: var(--reader-heading);
+}
+
+.read-aloud-source-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.read-aloud-source-button {
+  display: grid;
+  gap: 6px;
+  text-align: left;
+  border: 1px solid var(--reader-border);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: color-mix(in srgb, var(--reader-panel) 96%, transparent);
+  color: inherit;
+  cursor: pointer;
+}
+
+.read-aloud-source-button.active {
+  border-color: transparent;
+  background: var(--reader-accent);
+  color: white;
+}
+
+.read-aloud-source-button strong {
+  font-size: 0.96rem;
+}
+
+.read-aloud-note {
+  margin: 0;
+}
+
 .document-frame {
-  overflow: auto;
+  /* Grows with its content; the window scrolls, not this element. Focus-only
+     target for Ctrl+Shift+G (library focus mode). */
   min-height: 0;
   padding: 24px;
+  outline: none;
+}
+
+.document-frame:focus-visible {
+  outline: 2px solid color-mix(in srgb, var(--reader-accent) 60%, transparent);
+  outline-offset: -4px;
+  border-radius: 16px;
 }
 
 .markdown-article {
@@ -369,24 +836,197 @@ textarea {
 .inline-code {
   padding: 2px 7px;
   border-radius: 8px;
+  font-family: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  font-size: 0.88em;
   background: color-mix(in srgb, var(--reader-accent-soft) 40%, transparent);
 }
 
-.copy-code-button {
-  position: absolute;
-  top: 12px;
-  right: 12px;
-  border: 1px solid var(--reader-border);
-  background: color-mix(in srgb, var(--reader-panel) 96%, transparent);
-  color: inherit;
-  border-radius: 10px;
-  padding: 6px 10px;
-  cursor: pointer;
+/* ─────────────────────────────────────────────────────────
+   Themed code blocks
+   ───────────────────────────────────────────────────────── */
+
+/* Dark palette (default) — tuned to play well with dark / low-light /
+   focus / ambient reader modes. Override for light / read below. */
+.code-block-shell {
+  --code-surface: #0f1422;
+  --code-border: color-mix(in srgb, #20263a 80%, var(--reader-border));
+  --code-text: #e2e6f1;
+  --code-muted: #8a93a8;
+  --code-kw: #c792ea;
+  --code-str: #c3e88d;
+  --code-num: #f78c6c;
+  --code-fn: #82aaff;
+  --code-type: #ffcb6b;
+  --code-attr: #89ddff;
+  --code-builtin: #ffcb6b;
+  --code-regex: #c3e88d;
+  --code-meta: #82aaff;
+  --code-punct: #e2e6f1;
+
+  position: relative;
+  margin: 20px 0;
+  border-radius: 14px;
+  border: 1px solid var(--code-border);
+  background: var(--code-surface);
+  box-shadow: 0 10px 30px -18px color-mix(in srgb, black 70%, transparent);
+  overflow: hidden;
+  isolation: isolate;
 }
 
-.code-block-shell {
-  position: relative;
+.mode-light .code-block-shell,
+.mode-read .code-block-shell {
+  --code-surface: #f7f3ec;
+  --code-border: color-mix(in srgb, #c9beaa 45%, var(--reader-border));
+  --code-text: #2a2f38;
+  --code-muted: #8a8680;
+  --code-kw: #8250df;
+  --code-str: #22863a;
+  --code-num: #b08800;
+  --code-fn: #0969da;
+  --code-type: #953800;
+  --code-attr: #116329;
+  --code-builtin: #953800;
+  --code-regex: #032f62;
+  --code-meta: #0969da;
+  --code-punct: #2a2f38;
 }
+
+.code-block-chrome {
+  position: absolute;
+  top: 10px;
+  right: 10px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  z-index: 2;
+}
+
+.code-lang-label {
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--code-muted);
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--code-surface) 70%, transparent);
+  border: 1px solid var(--code-border);
+}
+
+.copy-code-button {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 10px;
+  font-size: 0.74rem;
+  font-weight: 600;
+  color: var(--code-muted);
+  background: color-mix(in srgb, var(--code-surface) 40%, transparent);
+  border: 1px solid var(--code-border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: color 0.12s ease, background 0.12s ease, border-color 0.12s ease;
+}
+
+.copy-code-button:hover {
+  color: var(--code-text);
+  background: color-mix(in srgb, var(--code-surface) 80%, transparent);
+  border-color: color-mix(in srgb, var(--reader-accent) 35%, var(--code-border));
+}
+
+/* Reset the article-wide pre styling inside the code block shell, so
+   the shell chrome owns the surface and spacing. */
+.markdown-article .code-block-shell pre {
+  position: static;
+  margin: 0;
+  padding: 38px 18px 18px;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--code-text);
+  font-family: ui-monospace, 'SF Mono', 'JetBrains Mono', Menlo, Consolas, monospace;
+  font-size: 13.5px;
+  line-height: 1.65;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  tab-size: 2;
+}
+
+.markdown-article .code-block-shell pre::-webkit-scrollbar {
+  height: 8px;
+}
+
+.markdown-article .code-block-shell pre::-webkit-scrollbar-thumb {
+  background: color-mix(in srgb, var(--code-muted) 40%, transparent);
+  border-radius: 999px;
+}
+
+.markdown-article .code-block-shell code {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  padding: 0;
+  border-radius: 0;
+}
+
+/* highlight.js token palette — consumed by rehype-highlight output.
+   Colours resolve from the CSS variables above so every reader theme
+   can paint its own palette without re-declaring the selectors. */
+.code-block-shell .hljs { color: var(--code-text); background: transparent; }
+.code-block-shell .hljs-comment,
+.code-block-shell .hljs-quote {
+  color: var(--code-muted);
+  font-style: italic;
+}
+.code-block-shell .hljs-keyword,
+.code-block-shell .hljs-selector-tag,
+.code-block-shell .hljs-literal,
+.code-block-shell .hljs-section,
+.code-block-shell .hljs-link {
+  color: var(--code-kw);
+}
+.code-block-shell .hljs-string,
+.code-block-shell .hljs-regexp,
+.code-block-shell .hljs-template-tag,
+.code-block-shell .hljs-template-variable,
+.code-block-shell .hljs-addition {
+  color: var(--code-str);
+}
+.code-block-shell .hljs-number,
+.code-block-shell .hljs-symbol,
+.code-block-shell .hljs-bullet,
+.code-block-shell .hljs-meta {
+  color: var(--code-num);
+}
+.code-block-shell .hljs-title,
+.code-block-shell .hljs-title.function_,
+.code-block-shell .hljs-function .hljs-title,
+.code-block-shell .hljs-name {
+  color: var(--code-fn);
+}
+.code-block-shell .hljs-built_in,
+.code-block-shell .hljs-builtin-name,
+.code-block-shell .hljs-class .hljs-title,
+.code-block-shell .hljs-title.class_,
+.code-block-shell .hljs-type {
+  color: var(--code-type);
+}
+.code-block-shell .hljs-attr,
+.code-block-shell .hljs-attribute,
+.code-block-shell .hljs-variable.language_,
+.code-block-shell .hljs-params {
+  color: var(--code-attr);
+}
+.code-block-shell .hljs-tag,
+.code-block-shell .hljs-deletion {
+  color: var(--code-builtin);
+}
+.code-block-shell .hljs-punctuation,
+.code-block-shell .hljs-operator {
+  color: var(--code-punct);
+}
+.code-block-shell .hljs-emphasis { font-style: italic; }
+.code-block-shell .hljs-strong { font-weight: 700; }
 
 .callout {
   border-left: 4px solid var(--reader-accent);
@@ -491,10 +1131,15 @@ textarea {
   padding: 12px;
 }
 
+.note-link {
+  text-align: left;
+}
+
 .search-result span,
 .search-result p {
   margin: 0;
   color: var(--reader-muted);
+  overflow-wrap: anywhere;
 }
 
 .status-toast {
@@ -528,14 +1173,49 @@ textarea {
   position: relative;
   width: min(720px, calc(100vw - 32px));
   margin: 8vh auto;
+  max-height: calc(100vh - 48px);
   padding: 18px;
+  overflow: auto;
+}
+
+.note-composer,
+.note-selection-preview {
+  display: grid;
+  gap: 14px;
+}
+
+.note-selection-preview {
+  padding: 14px 16px;
+  border-radius: 18px;
+  border: 1px solid var(--reader-border);
+  background: color-mix(in srgb, var(--reader-surface) 40%, transparent);
+}
+
+.note-selection-preview p {
+  margin: 0;
+  color: var(--reader-muted);
+}
+
+.note-composer-field {
+  display: grid;
+  gap: 10px;
+}
+
+.note-composer-field textarea {
+  width: 100%;
+  resize: vertical;
+  border: 1px solid var(--reader-border);
+  border-radius: 16px;
+  padding: 14px 16px;
+  background: color-mix(in srgb, var(--reader-panel) 96%, transparent);
+  color: inherit;
 }
 
 .settings-grid {
   grid-template-columns: repeat(2, minmax(0, 1fr));
 }
 
-.settings-grid label {
+.settings-grid label:not(.checkbox-row) {
   display: grid;
   gap: 8px;
 }
@@ -544,6 +1224,13 @@ textarea {
   display: flex;
   align-items: center;
   gap: 10px;
+  align-self: center;
+}
+
+.search-results {
+  max-height: min(52vh, calc(100vh - 240px));
+  overflow-y: auto;
+  padding-right: 4px;
 }
 
 .file-input-button input {
@@ -551,9 +1238,9 @@ textarea {
 }
 
 .shortcut-list li {
-  display: flex;
-  justify-content: space-between;
-  gap: 14px;
+  display: grid;
+  grid-template-columns: minmax(140px, auto) minmax(0, 1fr);
+  gap: 18px;
   align-items: center;
   padding: 12px 0;
   border-bottom: 1px solid var(--reader-border);
@@ -562,9 +1249,16 @@ textarea {
 .shortcut-list kbd {
   display: inline-flex;
   align-items: center;
-  padding: 6px 8px;
+  padding: 6px 10px;
   border-radius: 10px;
+  border: 1px solid var(--reader-border);
   background: color-mix(in srgb, var(--reader-accent-soft) 50%, transparent);
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+  font-size: 12px;
+}
+
+.shortcut-list span {
+  min-width: 0;
 }
 
 .empty-state {
@@ -616,6 +1310,11 @@ textarea {
     grid-template-columns: 280px minmax(0, 1fr);
   }
 
+  .reader-layout.file-panel-hidden,
+  .reader-layout.file-panel-hidden.toc-panel-hidden {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
   .toc-panel {
     grid-column: 1 / -1;
   }
@@ -626,17 +1325,692 @@ textarea {
     grid-template-columns: 1fr;
   }
 
+  /* Below ~tablet widths we collapse to a single column. Sidebars un-stick
+     and flow with the page so their internal scrolls don't fight the window. */
   .reader-layout {
     grid-template-columns: 1fr;
   }
 
+  .reader-layout.file-panel-hidden,
+  .reader-layout.toc-panel-hidden,
+  .reader-layout.file-panel-hidden.toc-panel-hidden,
+  .reader-layout.left-panel-full {
+    grid-template-columns: 1fr;
+  }
+
+  .panel {
+    position: static;
+    top: auto;
+    max-height: none;
+    overflow: visible;
+  }
+
+  .panel-stack,
+  .panel-stack--scroll {
+    overflow-y: visible;
+  }
+
+  .panel-sticky-top {
+    position: static;
+    margin: 0;
+    padding: 0;
+    background: transparent;
+    backdrop-filter: none;
+    border-bottom: 0;
+  }
+
+  .tree-scroll {
+    flex: none;
+    max-height: 60vh;
+  }
+
   .status-bar,
-  .hero-strip {
+  .hero-strip,
+  .read-aloud-header,
+  .read-aloud-controls {
     grid-template-columns: 1fr;
     display: grid;
   }
 
+  .read-aloud-source-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .reader-layout.left-panel-full .file-panel .panel-stack {
+    grid-template-columns: 1fr;
+  }
+
   .settings-grid {
     grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 720px) {
+  .theme-menu {
+    width: min(320px, calc(100vw - 32px));
+    right: 0;
+  }
+
+  .read-aloud-card {
+    padding-inline: 20px;
+  }
+
+  .read-aloud-source-grid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ─────────────────────────────────────────────────────────
+   Reader UI upgrade — additive refinements
+   ───────────────────────────────────────────────────────── */
+
+/* Toolbar: ghost action variant for secondary file ops */
+.toolbar-button.ghost {
+  background: transparent;
+}
+
+/* Toolbar brand: mount-state pulse dot */
+.toolbar-brand-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--reader-accent) 72%, transparent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--reader-accent) 18%, transparent);
+  margin-left: 6px;
+  flex: 0 0 auto;
+}
+
+/* Panel-toggle icon buttons: underline-dot active treatment
+   (quieter than the solid accent fill primary buttons use) */
+.toolbar-button.icon.toggle-active {
+  background: transparent;
+  color: var(--reader-heading);
+  position: relative;
+}
+
+.toolbar-button.icon.toggle-active::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 5px;
+  transform: translateX(-50%);
+  width: 14px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--reader-accent);
+}
+
+/* Progress rail: richer gradient + soft glow */
+.progress-rail {
+  height: 3px;
+}
+
+.progress-bar {
+  background: linear-gradient(90deg, var(--reader-accent), color-mix(in srgb, white 24%, var(--reader-accent)));
+  box-shadow: 0 0 10px 0 color-mix(in srgb, var(--reader-accent) 45%, transparent);
+  transition: width 0.24s ease;
+}
+
+/* Panel corner accent glow (file + navigator panels) */
+/* .panel {
+  position: relative;
+} */
+
+.panel::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  background: radial-gradient(120% 70% at 100% 0%, var(--reader-accent-soft), transparent 55%);
+  opacity: 0.45;
+  z-index: 0;
+}
+
+.panel > * {
+  position: relative;
+  z-index: 1;
+}
+
+/* ─── Document hero refresh ─── */
+.hero-strip {
+  padding: 28px 32px 20px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 20px;
+}
+
+.hero-lede {
+  min-width: 0;
+}
+
+.hero-eyebrow {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--reader-muted);
+  margin-bottom: 10px;
+}
+
+.hero-eyebrow-accent {
+  color: var(--reader-accent);
+}
+
+.hero-meta-dot {
+  width: 3px;
+  height: 3px;
+  border-radius: 999px;
+  background: currentColor;
+  opacity: 0.6;
+}
+
+.hero-strip h1 {
+  margin: 0;
+  font-size: clamp(1.45rem, 2.4vw, 1.85rem);
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  line-height: 1.15;
+  color: var(--reader-heading);
+}
+
+.hero-subtitle {
+  color: var(--reader-muted);
+  margin: 8px 0 0;
+  font-size: 0.9rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 720px;
+}
+
+.hero-actions {
+  flex-wrap: wrap;
+  align-self: flex-start;
+}
+
+/* ─── Read-aloud panel refresh ─── */
+.ra-playback {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.toolbar-button.primary-play {
+  background: var(--reader-accent);
+  color: white;
+  border-color: transparent;
+}
+
+.ra-segmented {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 4px;
+  padding: 4px;
+  border: 1px solid var(--reader-border);
+  border-radius: 16px;
+  background: color-mix(in srgb, var(--reader-surface) 32%, transparent);
+}
+
+.ra-segment {
+  display: grid;
+  gap: 3px;
+  align-content: center;
+  text-align: left;
+  border: 1px solid transparent;
+  background: transparent;
+  color: inherit;
+  border-radius: 12px;
+  padding: 10px 12px;
+  cursor: pointer;
+  transition:
+    background 0.16s ease,
+    color 0.16s ease;
+}
+
+.ra-segment:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--reader-accent-soft) 30%, transparent);
+}
+
+.ra-segment[aria-selected='true'] {
+  background: var(--reader-accent);
+  color: white;
+}
+
+.ra-segment[aria-selected='true'] small {
+  color: color-mix(in srgb, white 82%, var(--reader-accent));
+}
+
+.ra-segment strong {
+  font-size: 0.88rem;
+  line-height: 1.2;
+  color: inherit;
+}
+
+.ra-segment small {
+  font-size: 0.72rem;
+  color: var(--reader-muted);
+}
+
+.ra-segment:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.ra-current-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4px 12px;
+  border-radius: 999px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  background: color-mix(in srgb, var(--reader-accent) 24%, transparent);
+  color: var(--reader-heading);
+  min-width: 72px;
+  max-width: 220px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ra-current-chip.idle {
+  background: color-mix(in srgb, var(--reader-muted) 12%, transparent);
+  color: var(--reader-muted);
+  font-weight: 500;
+}
+
+/* ─── Document status bar refresh ─── */
+.status-progress {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+
+.status-progress-track {
+  width: 140px;
+  height: 6px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--reader-muted) 14%, transparent);
+  overflow: hidden;
+}
+
+.status-progress-fill {
+  display: block;
+  height: 100%;
+  background: linear-gradient(90deg, var(--reader-accent), color-mix(in srgb, white 20%, var(--reader-accent)));
+  border-radius: inherit;
+  transition: width 0.24s ease;
+}
+
+.status-progress-label {
+  font-variant-numeric: tabular-nums;
+  color: var(--reader-heading);
+  font-weight: 600;
+}
+
+.export-menu {
+  position: relative;
+}
+
+.export-menu-list {
+  position: absolute;
+  right: 0;
+  bottom: calc(100% + 8px);
+  min-width: 220px;
+  padding: 6px;
+  display: grid;
+  gap: 2px;
+  border: 1px solid var(--reader-border);
+  border-radius: 14px;
+  background: color-mix(in srgb, var(--reader-panel) 98%, transparent);
+  box-shadow: var(--reader-shadow);
+  backdrop-filter: blur(18px);
+  z-index: 20;
+}
+
+.export-menu-item {
+  width: 100%;
+  text-align: left;
+  padding: 10px 12px;
+  background: transparent;
+  border: 0;
+  border-radius: 10px;
+  color: inherit;
+  cursor: pointer;
+  display: inline-flex;
+  gap: 10px;
+  align-items: center;
+  font: inherit;
+}
+
+.export-menu-item:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--reader-accent-soft) 40%, transparent);
+}
+
+.export-menu-item:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* ─── Navigator panel section collapse ─── */
+.panel-section-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 10px;
+  align-items: center;
+  width: 100%;
+  padding: 2px 0 6px;
+  background: transparent;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+}
+
+.panel-section-header .sidebar-title {
+  padding: 0;
+  margin: 0;
+}
+
+.panel-section-meta {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  color: var(--reader-muted);
+}
+
+.section-count-badge {
+  min-width: 22px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--reader-accent-soft) 52%, transparent);
+  color: var(--reader-heading);
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-align: center;
+  line-height: 1.5;
+}
+
+.panel-section-chevron {
+  transition: transform 0.18s ease;
+  flex: 0 0 auto;
+}
+
+.panel-section-header[aria-expanded='false'] .panel-section-chevron {
+  transform: rotate(-90deg);
+}
+
+/* ─── TOC nesting guides + active-ancestor path ─── */
+.toc-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0 4px 6px;
+}
+
+.toc-item {
+  position: relative;
+  padding-left: calc((var(--toc-depth, 1) - 1) * 14px);
+}
+
+.toc-item::before {
+  content: '';
+  position: absolute;
+  left: calc((var(--toc-depth, 1) - 1) * 14px - 8px);
+  top: 2px;
+  bottom: 2px;
+  width: 2px;
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--reader-border) 90%, transparent);
+  transition: background 0.16s ease;
+  pointer-events: none;
+}
+
+.toc-item[data-depth='1']::before {
+  display: none;
+}
+
+.toc-item.active-ancestor::before {
+  background: color-mix(in srgb, var(--reader-accent) 70%, transparent);
+}
+
+.list-link.current {
+  position: relative;
+  color: var(--reader-heading);
+  background: color-mix(in srgb, var(--reader-accent) 14%, transparent);
+}
+
+.list-link.current::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: 6px;
+  bottom: 6px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--reader-accent);
+}
+
+.toc-item[data-depth='1'] .list-link.current::before {
+  left: -8px;
+}
+
+/* Notes cards: editorial quote styling */
+.note-link strong {
+  font-family: 'Iowan Old Style', 'Palatino Linotype', Georgia, serif;
+  font-weight: 500;
+  font-style: italic;
+  line-height: 1.4;
+}
+
+.note-link p {
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--reader-text);
+}
+
+/* ─── File panel row refinements ─── */
+.tree-row.active .tree-button {
+  position: relative;
+}
+
+.tree-row.active .tree-button::before {
+  content: '';
+  position: absolute;
+  left: -4px;
+  top: 6px;
+  bottom: 6px;
+  width: 2px;
+  border-radius: 2px;
+  background: var(--reader-accent);
+}
+
+.tree-trailing {
+  flex: 0 0 auto;
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: var(--reader-muted);
+  padding-inline-start: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+.tree-row.active .tree-trailing {
+  color: var(--reader-heading);
+}
+
+/* File panel: visual separator above tree */
+.file-tree-divider {
+  height: 1px;
+  margin-block: 2px;
+  background: linear-gradient(
+    90deg,
+    transparent,
+    color-mix(in srgb, var(--reader-border) 80%, transparent),
+    transparent
+  );
+}
+
+/* ─── Read-aloud panel: header, transport and rate row ─── */
+.ra-header-row,
+.ra-transport-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.ra-header-title {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  flex: 1;
+}
+
+.ra-header-title strong {
+  color: var(--reader-heading);
+  font-size: 0.96rem;
+  line-height: 1.2;
+}
+
+.ra-title-icon {
+  color: var(--reader-muted);
+  flex: 0 0 auto;
+}
+
+.ra-header-meta {
+  color: var(--reader-muted);
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* State pip: a 6px dot that changes tone with playback state. Idle is muted,
+   live pulses the accent, pause uses a warm neutral. */
+.ra-state-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 999px;
+  flex: 0 0 auto;
+  background: color-mix(in srgb, var(--reader-muted) 40%, transparent);
+}
+
+.ra-state-dot.tone-live {
+  background: var(--reader-accent);
+  box-shadow: 0 0 0 3px color-mix(in srgb, var(--reader-accent) 24%, transparent);
+  animation: ra-state-pulse 1.6s ease-in-out infinite;
+}
+
+.ra-state-dot.tone-pause {
+  background: color-mix(in srgb, var(--reader-accent) 40%, var(--reader-muted));
+}
+
+@keyframes ra-state-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--reader-accent) 18%, transparent);
+  }
+  50% {
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--reader-accent) 10%, transparent);
+  }
+}
+
+.ra-state-label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--reader-muted);
+  flex: 0 0 auto;
+}
+
+.ra-state-label.tone-live {
+  color: var(--reader-accent);
+}
+
+.ra-state-label.tone-pause {
+  color: color-mix(in srgb, var(--reader-accent) 70%, var(--reader-heading));
+}
+
+.toolbar-button.primary-play {
+  padding-inline: 18px;
+  min-height: 40px;
+  border-radius: 14px;
+  font-weight: 600;
+  font-size: 0.92rem;
+}
+
+.ra-current-word {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 4px 6px 4px 12px;
+  border: 1px solid var(--reader-border);
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--reader-panel) 94%, transparent);
+  min-width: 0;
+  max-width: 100%;
+}
+
+.ra-current-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--reader-muted);
+  flex: 0 0 auto;
+}
+
+.ra-rate-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.ra-rate-row input[type='range'] {
+  width: 100%;
+}
+
+.ra-rate-value {
+  font-variant-numeric: tabular-nums;
+  color: var(--reader-heading);
+  font-weight: 600;
+}
+
+/* ─── Responsive tweaks for new surfaces ─── */
+@media (max-width: 1040px) {
+  .ra-segmented {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ra-header-meta {
+    display: none;
+  }
+
+  .status-progress-track {
+    width: 100px;
+  }
+}
+
+@media (max-width: 720px) {
+  .ra-segmented {
+    grid-template-columns: 1fr;
+  }
+
+  .hero-strip {
+    padding: 24px 22px 18px;
+  }
+
+  .status-progress-track {
+    width: 80px;
   }
 }

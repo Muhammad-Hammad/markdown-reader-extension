@@ -16,10 +16,10 @@ export const SOURCE_FILTERS: Array<{ label: string; value: SourceTypeFilter }> =
 ]
 
 export const KEYBOARD_SHORTCUTS = [
-  ['Ctrl+Shift+M', 'Open the reader tab'],
   ['Ctrl+K', 'Open command palette'],
   ['Ctrl+Shift+F', 'Focus content search'],
   ['Ctrl+Shift+L', 'Toggle TOC'],
+  ['Ctrl+Shift+G', 'Toggle reading focus mode'],
   ['Ctrl+Shift+D', 'Cycle reader mode'],
   ['/', 'Focus file filter'],
   ['?', 'Open keyboard help'],

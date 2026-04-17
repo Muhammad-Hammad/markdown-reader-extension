@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react'
+import { useEffect, type ReactNode } from 'react'
 
 function Modal({
   children,
@@ -9,6 +9,20 @@ function Modal({
   onClose: () => void
   title: string
 }) {
+  useEffect(() => {
+    const handleKeydown = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') {
+        return
+      }
+
+      event.preventDefault()
+      onClose()
+    }
+
+    window.addEventListener('keydown', handleKeydown)
+    return () => window.removeEventListener('keydown', handleKeydown)
+  }, [onClose])
+
   return (
     <div className="modal-shell" role="dialog" aria-modal="true" aria-label={title}>
       <button type="button" className="modal-backdrop" onClick={onClose} />

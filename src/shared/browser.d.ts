@@ -10,8 +10,8 @@ interface OpenFilePickerOptions {
 }
 
 interface Window {
-  showDirectoryPicker(): Promise<FileSystemDirectoryHandle>
-  showOpenFilePicker(options?: OpenFilePickerOptions): Promise<FileSystemFileHandle[]>
+  showDirectoryPicker?(): Promise<FileSystemDirectoryHandle>
+  showOpenFilePicker?(options?: OpenFilePickerOptions): Promise<FileSystemFileHandle[]>
 }
 
 type FileSystemPermissionMode = 'read' | 'readwrite'

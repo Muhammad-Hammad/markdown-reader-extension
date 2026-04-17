@@ -20,6 +20,8 @@ import {
   readFromSourceUrl,
   readNodeDocument,
   scanDirectory,
+  supportsDirectoryPicker,
+  supportsOpenFilePicker,
 } from '../../shared/fs'
 import {
   DEFAULT_SETTINGS,
@@ -33,14 +35,17 @@ import {
   type RecentDocument,
   type SearchHit,
   type SourceTypeFilter,
+  type TocItem,
 } from '../../shared/types'
 import {
   buildExportHtml,
+  captureSelectionLocation,
   collectDirectoryPaths,
   downloadTextFile,
   findNodeById,
   getErrorMessage,
   joinPathSegments,
+  resolveNoteTextRange,
 } from '../utils'
 
 export function useReaderWorkspace() {
@@ -53,6 +58,7 @@ export function useReaderWorkspace() {
   const [fileFilter, setFileFilter] = useState('')
   const [typeFilter, setTypeFilter] = useState<SourceTypeFilter>('all')
   const [tocFilter, setTocFilter] = useState('')
+  const [tocItems, setTocItems] = useState<TocItem[]>([])
   const [sourceInput, setSourceInput] = useState('')
   const [statusMessage, setStatusMessage] = useState(DEFAULT_STATUS_MESSAGE)
   const [searchIndex, setSearchIndex] = useState<SearchHit[]>([])
@@ -74,6 +80,7 @@ export function useReaderWorkspace() {
   const articleRef = useRef<HTMLElement | null>(null)
   const contentSearchInputRef = useRef<HTMLInputElement | null>(null)
   const fileSearchInputRef = useRef<HTMLInputElement | null>(null)
+  const scrollRestoreFrameRef = useRef(0)
 
   const updateSettings = useCallback((patch: Partial<ReaderSettings>) => {
     setSettings((current) => {
@@ -102,6 +109,10 @@ export function useReaderWorkspace() {
 
   const setDocument = useCallback((document: ReaderDocument) => {
     setActiveDocument(document)
+    setActiveHeadingId('')
+    setActiveParagraphIndex(0)
+    setCurrentSelection('')
+    setTocItems([])
     if (document.sourceType === 'folder-file') {
       setExpandedPaths((current) => new Set([...current, ...document.path.split('/').slice(0, -1).map(joinPathSegments)]))
     }
@@ -120,6 +131,13 @@ export function useReaderWorkspace() {
   }, [])
 
   const openFolder = useCallback(async () => {
+    if (!supportsDirectoryPicker() || !window.showDirectoryPicker) {
+      setStatusMessage(
+        'Native folder access is not available in this browser. Use Chrome or Brave for folders, or open a file instead.',
+      )
+      return
+    }
+
     try {
       const handle = await window.showDirectoryPicker()
       const hasPermission = await ensurePermission(handle)
@@ -138,6 +156,13 @@ export function useReaderWorkspace() {
   }, [refreshTreeFromHandle])
 
   const openSingleFile = useCallback(async () => {
+    if (!supportsOpenFilePicker() || !window.showOpenFilePicker) {
+      setStatusMessage(
+        'Native file picking is not available here. Drop a Markdown file into the reader or drop a raw Markdown URL.',
+      )
+      return
+    }
+
     try {
       const [fileHandle] = await window.showOpenFilePicker({
         types: [
@@ -166,6 +191,11 @@ export function useReaderWorkspace() {
   }, [setDocument])
 
   const openSource = useCallback(async () => {
+    if (!sourceInput.trim()) {
+      setStatusMessage('Paste a raw Markdown URL or file:// link first.')
+      return
+    }
+
     try {
       const document = await readFromSourceUrl(sourceInput)
       setDocument(document)
@@ -223,6 +253,49 @@ export function useReaderWorkspace() {
     setActiveHeadingId(headingId)
   }, [])
 
+  const jumpToNote = useCallback(
+    (note: NoteRecord) => {
+      if (note.documentId !== activeDocument?.id) {
+        setStatusMessage('Open the document for this note first.')
+        return
+      }
+
+      const article = articleRef.current
+      if (!article) {
+        setStatusMessage('The document is not ready yet.')
+        return
+      }
+
+      const { range } = resolveNoteTextRange(article, note)
+      if (range) {
+        const selection = window.getSelection()
+        selection?.removeAllRanges()
+        selection?.addRange(range)
+
+        const target = range.startContainer.parentElement?.closest('p, li, blockquote, h1, h2, h3, h4') ?? article
+        target.scrollIntoView({ behavior: 'smooth', block: 'center' })
+        contentScrollRef.current?.focus()
+        setCurrentSelection(note.quote)
+
+        if (note.headingId) {
+          setActiveHeadingId(note.headingId)
+        }
+
+        setStatusMessage('Jumped to the saved note location.')
+        return
+      }
+
+      if (note.headingId) {
+        jumpToHeading(note.headingId)
+        setStatusMessage('Jumped to the saved note section.')
+        return
+      }
+
+      setStatusMessage('Saved note location is unavailable.')
+    },
+    [activeDocument?.id, jumpToHeading],
+  )
+
   const bookmarkCurrentSection = useCallback(
     (label: string, headingId?: string) => {
       if (!activeDocument) {
@@ -230,10 +303,22 @@ export function useReaderWorkspace() {
         return
       }
 
+      const normalizedLabel = label.trim()
+      const duplicate = library.bookmarks.some(
+        (item) =>
+          item.documentId === activeDocument.id &&
+          item.headingId === headingId &&
+          item.label.trim().toLowerCase() === normalizedLabel.toLowerCase(),
+      )
+      if (duplicate) {
+        setStatusMessage(`Already bookmarked ${normalizedLabel}.`)
+        return
+      }
+
       const bookmark: BookmarkRecord = {
         id: `${activeDocument.id}-${Date.now()}`,
         documentId: activeDocument.id,
-        label,
+        label: normalizedLabel,
         headingId,
         createdAt: Date.now(),
       }
@@ -242,21 +327,30 @@ export function useReaderWorkspace() {
         ...current,
         bookmarks: [bookmark, ...current.bookmarks],
       }))
-      setStatusMessage(`Bookmarked ${label}`)
+      setStatusMessage(`Bookmarked ${normalizedLabel}`)
     },
-    [activeDocument, updateLibrary],
+    [activeDocument, library.bookmarks, updateLibrary],
   )
 
   const saveSelectionAsHighlight = useCallback(() => {
-    if (!activeDocument || !currentSelection) {
+    const quote = currentSelection.trim()
+    if (!activeDocument || !quote) {
       setStatusMessage('Select text inside the document first.')
+      return
+    }
+
+    const duplicate = library.highlights.some(
+      (item) => item.documentId === activeDocument.id && item.quote.trim() === quote,
+    )
+    if (duplicate) {
+      setStatusMessage('That highlight is already saved.')
       return
     }
 
     const highlight: HighlightRecord = {
       id: `${activeDocument.id}-highlight-${Date.now()}`,
       documentId: activeDocument.id,
-      quote: currentSelection,
+      quote,
       createdAt: Date.now(),
     }
 
@@ -265,33 +359,53 @@ export function useReaderWorkspace() {
       highlights: [highlight, ...current.highlights],
     }))
     setStatusMessage('Saved selection as a highlight.')
-  }, [activeDocument, currentSelection, updateLibrary])
+  }, [activeDocument, currentSelection, library.highlights, updateLibrary])
 
-  const saveSelectionAsNote = useCallback(() => {
-    if (!activeDocument || !currentSelection) {
-      setStatusMessage('Select text inside the document first.')
-      return
-    }
+  const saveSelectionAsNote = useCallback(
+    (
+      noteText: string,
+      noteMeta?: {
+        quote?: string
+        headingId?: string
+        selectionStart?: number
+        selectionEnd?: number
+      },
+    ) => {
+      const quote = noteMeta?.quote?.trim() || currentSelection.trim()
+      const normalizedNote = noteText.trim()
+      if (!activeDocument || !quote) {
+        setStatusMessage('Select text inside the document first.')
+        return false
+      }
 
-    const noteText = window.prompt('Add a note for the selected text:')
-    if (!noteText) {
-      return
-    }
+      if (!normalizedNote) {
+        setStatusMessage('Write a note before saving.')
+        return false
+      }
 
-    const note: NoteRecord = {
-      id: `${activeDocument.id}-note-${Date.now()}`,
-      documentId: activeDocument.id,
-      quote: currentSelection,
-      note: noteText.trim(),
-      createdAt: Date.now(),
-    }
+      const fallbackSelectionLocation =
+        noteMeta ?? (articleRef.current ? captureSelectionLocation(articleRef.current, window.getSelection()) : null)
 
-    updateLibrary((current) => ({
-      ...current,
-      notes: [note, ...current.notes],
-    }))
-    setStatusMessage('Saved a note for the current selection.')
-  }, [activeDocument, currentSelection, updateLibrary])
+      const note: NoteRecord = {
+        id: `${activeDocument.id}-note-${Date.now()}`,
+        documentId: activeDocument.id,
+        quote,
+        note: normalizedNote,
+        headingId: fallbackSelectionLocation?.headingId,
+        selectionStart: fallbackSelectionLocation?.selectionStart,
+        selectionEnd: fallbackSelectionLocation?.selectionEnd,
+        createdAt: Date.now(),
+      }
+
+      updateLibrary((current) => ({
+        ...current,
+        notes: [note, ...current.notes],
+      }))
+      setStatusMessage('Saved a note for the current selection.')
+      return true
+    },
+    [activeDocument, currentSelection, updateLibrary],
+  )
 
   const exportSettings = useCallback(() => {
     downloadTextFile('markdown-reader-settings.json', JSON.stringify(settings, null, 2), 'application/json')
@@ -339,20 +453,56 @@ export function useReaderWorkspace() {
 
   const openRecentDocument = useCallback(
     async (documentId: string, sourceUrl?: string) => {
-      const targetNode = findNodeById(tree, documentId)
-      if (targetNode) {
-        const document = await readNodeDocument(targetNode)
-        setDocument(document)
-        return
+      const recentDocument = library.recentDocuments.find((item) => item.id === documentId)
+
+      const openCachedRecentDocument = () => {
+        if (!recentDocument?.cachedContent) {
+          return false
+        }
+
+        setDocument({
+          id: recentDocument.id,
+          title: recentDocument.title,
+          path: recentDocument.path,
+          content: recentDocument.cachedContent,
+          sourceType: recentDocument.sourceType,
+          updatedAt: recentDocument.updatedAt,
+          sourceUrl: recentDocument.sourceUrl,
+          fileType: recentDocument.fileType,
+        })
+        setStatusMessage(`Opened cached copy of ${recentDocument.title}`)
+        return true
       }
 
-      if (sourceUrl) {
-        setSourceInput(sourceUrl)
-        const document = await readFromSourceUrl(sourceUrl)
-        setDocument(document)
+      try {
+        const targetNode = findNodeById(tree, documentId)
+        if (targetNode) {
+          const document = await readNodeDocument(targetNode)
+          setDocument(document)
+          return
+        }
+
+        if (sourceUrl) {
+          setSourceInput(sourceUrl)
+          const document = await readFromSourceUrl(sourceUrl)
+          setDocument(document)
+          return
+        }
+
+        if (openCachedRecentDocument()) {
+          return
+        }
+
+        setStatusMessage('This recent document is unavailable until its folder or source is restored.')
+      } catch (error) {
+        if (openCachedRecentDocument()) {
+          return
+        }
+
+        setStatusMessage(getErrorMessage(error))
       }
     },
-    [setDocument, tree],
+    [library.recentDocuments, setDocument, tree],
   )
 
   useEffect(() => {
@@ -361,7 +511,7 @@ export function useReaderWorkspace() {
       setSettings(persisted.settings)
       setLibrary(persisted.library)
 
-      if (persisted.folderHandle && (await ensurePermission(persisted.folderHandle))) {
+      if (persisted.folderHandle && (await ensurePermission(persisted.folderHandle, 'read', false))) {
         setFolderHandle(persisted.folderHandle)
         setStatusMessage(`Restored folder: ${persisted.folderHandle.name}`)
         await refreshTreeFromHandle(persisted.folderHandle)
@@ -403,6 +553,7 @@ export function useReaderWorkspace() {
       sourceType: activeDocument.sourceType,
       fileType: activeDocument.fileType,
       updatedAt: Date.now(),
+      cachedContent: activeDocument.content,
       sourceUrl: activeDocument.sourceUrl,
     }
 
@@ -415,35 +566,60 @@ export function useReaderWorkspace() {
     setSourceInput(activeDocument.sourceUrl ?? activeDocument.path)
   }, [activeDocument, updateLibrary])
 
+  // Restore saved scroll position when a document becomes active. The window is
+  // the scroll container now, so we read/write scrollY instead of an internal
+  // element. Double rAF lets the article mount + images reflow before we jump.
   useEffect(() => {
-    const scrollElement = contentScrollRef.current
-    if (!scrollElement || !activeDocument) {
+    if (!activeDocument) {
       return
     }
 
     const savedProgress = library.progressRecords.find((item) => item.documentId === activeDocument.id)
-    scrollElement.scrollTop = savedProgress?.scrollTop ?? 0
-    setProgress(savedProgress?.progress ?? 0)
-  }, [activeDocument, library.progressRecords])
+    const targetScroll = savedProgress?.scrollTop ?? 0
 
+    const firstFrame = window.requestAnimationFrame(() => {
+      const secondFrame = window.requestAnimationFrame(() => {
+        window.scrollTo({ top: targetScroll, behavior: 'auto' })
+      })
+      scrollRestoreFrameRef.current = secondFrame
+    })
+    scrollRestoreFrameRef.current = firstFrame
+
+    setProgress(savedProgress?.progress ?? 0)
+
+    return () => {
+      if (scrollRestoreFrameRef.current) {
+        window.cancelAnimationFrame(scrollRestoreFrameRef.current)
+        scrollRestoreFrameRef.current = 0
+      }
+    }
+    // We intentionally only re-run on document change, not on every progress
+    // mutation — otherwise each scroll tick would re-trigger a jump-to-saved.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeDocument?.id])
+
+  // Window-level scroll tracker. rAF coalesces events to one update per frame
+  // for the visible progress bar; persistence to IndexedDB is debounced so
+  // saveLibrary doesn't fire on every frame (that was the scroll lag).
   useEffect(() => {
-    const scrollElement = contentScrollRef.current
-    if (!scrollElement || !activeDocument) {
+    if (!activeDocument) {
       return
     }
 
-    const handleScroll = () => {
-      const maxScroll = Math.max(scrollElement.scrollHeight - scrollElement.clientHeight, 1)
-      const nextProgress = Math.min(scrollElement.scrollTop / maxScroll, 1)
-      setProgress(nextProgress)
+    const scrollingElement = document.scrollingElement ?? document.documentElement
+    let rafId = 0
+    let persistTimer = 0
+    let lastScrollTop = 0
+    let lastProgress = 0
 
+    const persistProgress = () => {
       updateLibrary((current) => ({
         ...current,
         progressRecords: [
           {
             documentId: activeDocument.id,
-            scrollTop: scrollElement.scrollTop,
-            progress: nextProgress,
+            scrollTop: lastScrollTop,
+            progress: lastProgress,
             updatedAt: Date.now(),
           },
           ...current.progressRecords.filter((item) => item.documentId !== activeDocument.id),
@@ -451,8 +627,31 @@ export function useReaderWorkspace() {
       }))
     }
 
-    scrollElement.addEventListener('scroll', handleScroll, { passive: true })
-    return () => scrollElement.removeEventListener('scroll', handleScroll)
+    const computeProgress = () => {
+      rafId = 0
+      const maxScroll = Math.max(scrollingElement.scrollHeight - window.innerHeight, 1)
+      lastScrollTop = window.scrollY
+      lastProgress = Math.min(Math.max(lastScrollTop / maxScroll, 0), 1)
+      setProgress(lastProgress)
+
+      window.clearTimeout(persistTimer)
+      persistTimer = window.setTimeout(persistProgress, 250)
+    }
+
+    const handleScroll = () => {
+      if (rafId) return
+      rafId = window.requestAnimationFrame(computeProgress)
+    }
+
+    window.addEventListener('scroll', handleScroll, { passive: true })
+    handleScroll()
+
+    return () => {
+      window.removeEventListener('scroll', handleScroll)
+      if (rafId) window.cancelAnimationFrame(rafId)
+      window.clearTimeout(persistTimer)
+      if (lastProgress > 0) persistProgress()
+    }
   }, [activeDocument, updateLibrary])
 
   const filteredTree = useMemo(() => filterTree(tree, fileFilter, typeFilter), [fileFilter, tree, typeFilter])
@@ -496,6 +695,7 @@ export function useReaderWorkspace() {
       exportSettings,
       handleDrop,
       importSettingsFromFile,
+      jumpToNote,
       jumpToHeading,
       openFolder,
       openRecentDocument,
@@ -515,6 +715,7 @@ export function useReaderWorkspace() {
       setSettingsOpen,
       setStatusMessage,
       setSourceInput,
+      setTocItems,
       setTocFilter,
       setTypeFilter,
       setActiveHeadingId,
@@ -561,6 +762,7 @@ export function useReaderWorkspace() {
       sourceInput,
       statusMessage,
       tocFilter,
+      tocItems,
       tree,
       typeFilter,
     },
@@ -568,4 +770,4 @@ export function useReaderWorkspace() {
 }
 
 const EMPTY_TREE: FileNode[] = []
-const DEFAULT_STATUS_MESSAGE = 'Load a folder, drop a file, or paste a raw Markdown URL.'
+const DEFAULT_STATUS_MESSAGE = 'Load a folder, drop a file, or drop a raw Markdown URL.'

@@ -4,6 +4,7 @@ import type { ReaderDocument } from '../../shared/types'
 
 interface ReaderInteractionOptions {
   activeDocument?: ReaderDocument
+  leftPanelMode: 'docked' | 'full'
   articleRef: RefObject<HTMLElement | null>
   contentScrollRef: RefObject<HTMLDivElement | null>
   fileSearchInputRef: RefObject<HTMLInputElement | null>
@@ -15,6 +16,7 @@ interface ReaderInteractionOptions {
   onDocumentRefresh: (document: ReaderDocument) => void
   onCommandPaletteToggle: () => void
   onHelpOpen: () => void
+  onLibraryFocusModeChange: (nextMode: 'docked' | 'full') => void
   onSelectionChange: (selection: string) => void
   onSearchOpen: () => void
   onStatusMessage: (message: string) => void
@@ -23,6 +25,7 @@ interface ReaderInteractionOptions {
 
 export function useReaderInteractions({
   activeDocument,
+  leftPanelMode,
   articleRef,
   autoRefresh,
   contentScrollRef,
@@ -34,6 +37,7 @@ export function useReaderInteractions({
   onCommandPaletteToggle,
   onDocumentRefresh,
   onHelpOpen,
+  onLibraryFocusModeChange,
   onSearchOpen,
   onSelectionChange,
   onStatusMessage,
@@ -100,7 +104,7 @@ export function useReaderInteractions({
         }
       },
       {
-        root: contentScrollRef.current,
+        root: null,
         rootMargin: '-10% 0px -70% 0px',
         threshold: [0.1, 0.5, 1],
       },
@@ -108,7 +112,7 @@ export function useReaderInteractions({
 
     headings.forEach((heading) => observer.observe(heading))
     return () => observer.disconnect()
-  }, [activeDocument?.id, articleRef, contentScrollRef, onActiveHeadingChange])
+  }, [activeDocument?.content, activeDocument?.id, articleRef, contentScrollRef, onActiveHeadingChange])
 
   useEffect(() => {
     const container = articleRef.current
@@ -132,7 +136,7 @@ export function useReaderInteractions({
         }
       },
       {
-        root: contentScrollRef.current,
+        root: null,
         rootMargin: '-10% 0px -40% 0px',
         threshold: [0.4, 0.7, 1],
       },
@@ -140,20 +144,42 @@ export function useReaderInteractions({
 
     paragraphs.forEach((paragraph) => observer.observe(paragraph))
     return () => observer.disconnect()
-  }, [activeDocument?.id, articleRef, contentScrollRef, onActiveParagraphChange])
+  }, [activeDocument?.content, activeDocument?.id, articleRef, contentScrollRef, onActiveParagraphChange])
 
   useEffect(() => {
+    let frameId = 0
     const updateSelection = () => {
       const selection = window.getSelection()
       onSelectionChange(selection?.toString().trim() ?? '')
     }
+    const scheduleSelectionUpdate = () => {
+      window.cancelAnimationFrame(frameId)
+      frameId = window.requestAnimationFrame(updateSelection)
+    }
+    const article = articleRef.current
 
-    document.addEventListener('selectionchange', updateSelection)
-    return () => document.removeEventListener('selectionchange', updateSelection)
-  }, [onSelectionChange])
+    document.addEventListener('selectionchange', scheduleSelectionUpdate)
+    article?.addEventListener('pointerup', scheduleSelectionUpdate)
+    article?.addEventListener('keyup', scheduleSelectionUpdate)
+
+    return () => {
+      window.cancelAnimationFrame(frameId)
+      document.removeEventListener('selectionchange', scheduleSelectionUpdate)
+      article?.removeEventListener('pointerup', scheduleSelectionUpdate)
+      article?.removeEventListener('keyup', scheduleSelectionUpdate)
+    }
+  }, [articleRef, onSelectionChange])
 
   useEffect(() => {
     const handleKeydown = (event: globalThis.KeyboardEvent) => {
+      if (document.querySelector('.modal-shell')) {
+        return
+      }
+
+      if (isEditableTarget(event.target) && !event.ctrlKey && !event.metaKey) {
+        return
+      }
+
       if (event.key === '?' && !event.ctrlKey && !event.metaKey) {
         event.preventDefault()
         onHelpOpen()
@@ -184,9 +210,37 @@ export function useReaderInteractions({
         event.preventDefault()
         cycleMode()
       }
+
+      if ((event.ctrlKey || event.metaKey) && event.shiftKey && event.key.toLowerCase() === 'g') {
+        event.preventDefault()
+        const nextMode = leftPanelMode === 'full' ? 'docked' : 'full'
+        onLibraryFocusModeChange(nextMode)
+        window.setTimeout(() => {
+          const focusTarget = nextMode === 'full' ? contentScrollRef.current : fileSearchInputRef.current
+          focusTarget?.focus()
+        }, 20)
+      }
     }
 
     window.addEventListener('keydown', handleKeydown)
     return () => window.removeEventListener('keydown', handleKeydown)
-  }, [contentSearchInputRef, cycleMode, fileSearchInputRef, onCommandPaletteToggle, onHelpOpen, onSearchOpen, onTocToggle])
+  }, [
+    contentSearchInputRef,
+    cycleMode,
+    fileSearchInputRef,
+    leftPanelMode,
+    onCommandPaletteToggle,
+    onHelpOpen,
+    onLibraryFocusModeChange,
+    onSearchOpen,
+    onTocToggle,
+  ])
+}
+
+function isEditableTarget(target: EventTarget | null) {
+  if (!(target instanceof HTMLElement)) {
+    return false
+  }
+
+  return Boolean(target.closest('input, textarea, select, [contenteditable="true"]'))
 }

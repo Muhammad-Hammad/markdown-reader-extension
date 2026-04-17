@@ -6,6 +6,14 @@ const TEXT_EXTENSIONS = new Set(['txt'])
 
 const textDecoder = new TextDecoder()
 
+export function supportsDirectoryPicker() {
+  return typeof window !== 'undefined' && typeof window.showDirectoryPicker === 'function'
+}
+
+export function supportsOpenFilePicker() {
+  return typeof window !== 'undefined' && typeof window.showOpenFilePicker === 'function'
+}
+
 function getExtension(name: string): string {
   const parts = name.toLowerCase().split('.')
   return parts.length > 1 ? parts.at(-1) ?? '' : ''
@@ -28,13 +36,22 @@ export function getFileType(name: string): ReaderDocument['fileType'] {
 export async function ensurePermission(
   handle: FileSystemHandle,
   mode: FileSystemPermissionMode = 'read',
+  prompt = true,
 ) {
   if (handle.queryPermission && (await handle.queryPermission({ mode })) === 'granted') {
     return true
   }
 
+  if (!prompt) {
+    return false
+  }
+
   if (handle.requestPermission) {
-    return (await handle.requestPermission({ mode })) === 'granted'
+    try {
+      return (await handle.requestPermission({ mode })) === 'granted'
+    } catch {
+      return false
+    }
   }
 
   return true

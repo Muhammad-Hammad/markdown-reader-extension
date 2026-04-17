@@ -1,11 +1,13 @@
-chrome.runtime.onInstalled.addListener(() => {
-  void chrome.runtime.openOptionsPage()
+import { openExtensionOptionsPage, onExtensionCommand, onExtensionInstalled } from './shared/runtime'
+
+onExtensionInstalled(() => {
+  void openExtensionOptionsPage()
 })
 
-chrome.commands.onCommand.addListener((command) => {
+onExtensionCommand((command) => {
   if (command !== 'open_reader') {
     return
   }
 
-  void chrome.runtime.openOptionsPage()
+  void openExtensionOptionsPage()
 })

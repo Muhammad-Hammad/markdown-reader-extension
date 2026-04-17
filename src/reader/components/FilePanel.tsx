@@ -1,6 +1,6 @@
 import { useVirtualizer } from '@tanstack/react-virtual'
 import clsx from 'clsx'
-import { BookText, ChevronDown, ChevronRight, Search } from 'lucide-react'
+import { BookText, ChevronDown, ChevronRight, Pin, PinOff, Search } from 'lucide-react'
 import { readNodeDocument } from '../../shared/fs'
 import type { FileNode } from '../../shared/types'
 import { SOURCE_FILTERS } from '../constants'
@@ -8,11 +8,23 @@ import { useReaderWorkspaceContext } from '../useReaderWorkspaceContext'
 
 function FilePanel() {
   const {
-    actions: { openRecentDocument, setDocument, setFileFilter, setTypeFilter, toggleDirectory },
+    actions: { openRecentDocument, setDocument, setFileFilter, setTypeFilter, toggleDirectory, updateSettings },
     derived: { flattenedRows },
-    refs: { fileSearchInputRef, treeScrollRef },
+    refs: { contentScrollRef, fileSearchInputRef, treeScrollRef },
     state: { activeDocument, expandedPaths, fileFilter, folderHandle, isScanning, library, settings, typeFilter },
   } = useReaderWorkspaceContext()
+  const isPinnedFull = settings.leftPanelMode === 'full'
+  const toggleLibraryFocusMode = (nextMode: 'docked' | 'full') => {
+    updateSettings({
+      leftPanelMode: nextMode,
+      showFileTree: true,
+    })
+
+    window.setTimeout(() => {
+      const focusTarget = nextMode === 'full' ? contentScrollRef.current : fileSearchInputRef.current
+      focusTarget?.focus()
+    }, 20)
+  }
 
   const virtualizer = useVirtualizer({
     count: flattenedRows.length,
@@ -32,7 +44,17 @@ function FilePanel() {
           <strong>Library</strong>
           <span>{folderHandle?.name ?? 'Local and remote sources'}</span>
         </div>
-        <span className="badge">{isScanning ? 'Scanning...' : `${flattenedRows.length} rows`}</span>
+        <div className="panel-header-actions">
+          <span className="badge">{isScanning ? 'Scanning...' : `${flattenedRows.length} rows`}</span>
+          <button
+            type="button"
+            className={clsx('toolbar-button', 'icon', { primary: isPinnedFull })}
+            onClick={() => toggleLibraryFocusMode(isPinnedFull ? 'docked' : 'full')}
+            title={isPinnedFull ? 'Leave reading focus mode' : 'Enter reading focus mode'}
+          >
+            {isPinnedFull ? <PinOff size={16} /> : <Pin size={16} />}
+          </button>
+        </div>
       </div>
 
       <div className="panel-stack">
@@ -119,6 +141,7 @@ function FilePanel() {
                   type="button"
                   className="list-link"
                   onClick={() => void openRecentDocument(item.id, item.sourceUrl)}
+                  title={item.title}
                 >
                   <span>{item.title}</span>
                   <small>{Math.round((documentProgress?.progress ?? 0) * 100)}%</small>
@@ -151,6 +174,7 @@ function TreeRow({
         type="button"
         className={clsx('tree-button', { active: isActive })}
         onClick={() => onToggle(node.path)}
+        title={node.name}
       >
         {isExpanded ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
         <span>{node.name}</span>
@@ -159,7 +183,7 @@ function TreeRow({
   }
 
   return (
-    <button type="button" className="tree-button file" onClick={() => void onOpen(node)}>
+    <button type="button" className="tree-button file" onClick={() => void onOpen(node)} title={node.name}>
       <span>{node.name}</span>
     </button>
   )

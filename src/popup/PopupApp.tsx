@@ -1,79 +1,78 @@
-import type { CSSProperties } from 'react'
-import { BookOpenText, FolderOpen, Globe, Keyboard } from 'lucide-react'
-
-const popupStyle: CSSProperties = {
-  width: 320,
-  padding: 16,
-  background: '#0f172a',
-  color: '#e2e8f0',
-  fontFamily: 'Inter, system-ui, sans-serif',
-}
-
-const cardStyle: CSSProperties = {
-  border: '1px solid rgba(148, 163, 184, 0.18)',
-  borderRadius: 16,
-  padding: 14,
-  background: 'rgba(15, 23, 42, 0.8)',
-}
-
-const buttonStyle: CSSProperties = {
-  width: '100%',
-  padding: '12px 14px',
-  marginTop: 10,
-  borderRadius: 12,
-  border: '1px solid rgba(148, 163, 184, 0.18)',
-  background: '#1d4ed8',
-  color: '#eff6ff',
-  fontSize: 14,
-  fontWeight: 600,
-  cursor: 'pointer',
-}
+import { ArrowRight, FolderOpen, Globe, Highlighter, Keyboard, NotebookPen, Volume2 } from 'lucide-react'
+import {
+  BRAND_MARK_PATH,
+  BRAND_NAME,
+  BRAND_POPUP_HEADLINE,
+  BRAND_POPUP_SUPPORT_NOTE,
+  BRAND_TAGLINE,
+} from '../shared/brand'
+import { openExtensionOptionsPage } from '../shared/runtime'
 
 function PopupApp() {
   const openReader = async () => {
-    await chrome.runtime.openOptionsPage()
+    await openExtensionOptionsPage()
     window.close()
   }
 
   return (
-    <main style={popupStyle}>
-      <section style={cardStyle}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-          <BookOpenText size={20} />
-          <div>
-            <strong style={{ display: 'block', fontSize: 15 }}>Markdown Reader</strong>
-            <span style={{ color: '#94a3b8', fontSize: 12 }}>
-              Nested files, reader modes, search, export.
-            </span>
+    <main className="popup-shell">
+      <section className="popup-card">
+        <div className="popup-brand">
+          <img src={BRAND_MARK_PATH} alt="" width="46" height="46" className="popup-brand-mark" />
+          <div className="popup-brand-copy">
+            <span className="popup-brand-kicker">Local-first reader</span>
+            <strong>{BRAND_NAME}</strong>
+            <p>{BRAND_TAGLINE}</p>
           </div>
         </div>
 
-        <button type="button" style={buttonStyle} onClick={openReader}>
-          Open reader workspace
+        <div className="popup-hero">
+          <h1>{BRAND_POPUP_HEADLINE}</h1>
+          <p>
+            Themes, read aloud, notes, highlights, and file-based reading in one calm workspace for Markdown.
+          </p>
+        </div>
+
+        <div className="popup-pills" aria-label="Key features">
+          <span>Reader modes</span>
+          <span>Read aloud</span>
+          <span>Highlights</span>
+          <span>Notes</span>
+        </div>
+
+        <button type="button" className="popup-primary-button" onClick={openReader}>
+          Open {BRAND_NAME}
+          <ArrowRight size={16} />
         </button>
 
-        <div
-          style={{
-            display: 'grid',
-            gap: 10,
-            marginTop: 14,
-            fontSize: 12,
-            color: '#cbd5e1',
-          }}
-        >
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <FolderOpen size={14} />
-            Pick folders or single files from the reader toolbar.
+        <div className="popup-feature-list">
+          <div className="popup-feature-item">
+            <FolderOpen size={15} />
+            Native folder and file workflows on Chromium browsers.
           </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <Globe size={14} />
-            Paste raw Markdown URLs or `file://` links into the source bar.
+          <div className="popup-feature-item">
+            <Globe size={15} />
+            Open raw Markdown URLs and `file://` sources from the reader bar.
           </div>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-            <Keyboard size={14} />
-            Use `Ctrl+Shift+M` to open the reader tab quickly.
+          <div className="popup-feature-item">
+            <Volume2 size={15} />
+            Listen by document, section, paragraph, or selection.
+          </div>
+          <div className="popup-feature-item">
+            <Highlighter size={15} />
+            Keep saved highlights and notes tied to the current document.
+          </div>
+          <div className="popup-feature-item">
+            <NotebookPen size={15} />
+            Built for quiet long-form reading, not just quick previews.
+          </div>
+          <div className="popup-feature-item">
+            <Keyboard size={15} />
+            Use `Ctrl+Shift+Y` to jump straight into the workspace.
           </div>
         </div>
+
+        <p className="popup-support-note">{BRAND_POPUP_SUPPORT_NOTE}</p>
       </section>
     </main>
   )

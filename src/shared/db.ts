@@ -41,8 +41,14 @@ export async function loadPersistedState(): Promise<PersistedState> {
   ])
 
   return {
-    settings: settings ?? DEFAULT_SETTINGS,
-    library: library ?? EMPTY_LIBRARY,
+    settings: {
+      ...DEFAULT_SETTINGS,
+      ...(settings ?? {}),
+    },
+    library: {
+      ...EMPTY_LIBRARY,
+      ...(library ?? {}),
+    },
     folderHandle,
   }
 }

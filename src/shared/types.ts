@@ -2,6 +2,7 @@ export type ReaderMode = 'light' | 'dark' | 'read' | 'low-light' | 'ambient' | '
 
 export type FontFamilyOption = 'system' | 'serif' | 'sans' | 'mono'
 export type SourceTypeFilter = 'all' | 'markdown' | 'text'
+export type LeftPanelMode = 'docked' | 'full'
 
 export interface ReaderSettings {
   mode: ReaderMode
@@ -9,8 +10,11 @@ export interface ReaderSettings {
   fontSize: number
   lineHeight: number
   contentWidth: number
+  leftPanelMode: LeftPanelMode
   centered: boolean
   codeWrap: boolean
+  readAloudRate: number
+  readAloudVoiceURI: string
   showToc: boolean
   showFileTree: boolean
   showStatusBar: boolean
@@ -54,6 +58,7 @@ export interface RecentDocument {
   sourceType: ReaderDocument['sourceType']
   fileType: ReaderDocument['fileType']
   updatedAt: number
+  cachedContent?: string
   sourceUrl?: string
 }
 
@@ -77,6 +82,9 @@ export interface NoteRecord {
   documentId: string
   quote: string
   note: string
+  headingId?: string
+  selectionStart?: number
+  selectionEnd?: number
   createdAt: number
 }
 
@@ -115,8 +123,11 @@ export const DEFAULT_SETTINGS: ReaderSettings = {
   fontSize: 17,
   lineHeight: 1.7,
   contentWidth: 920,
+  leftPanelMode: 'docked',
   centered: true,
   codeWrap: false,
+  readAloudRate: 1,
+  readAloudVoiceURI: '',
   showToc: true,
   showFileTree: true,
   showStatusBar: true,
